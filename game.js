@@ -1,6 +1,8 @@
 'use strict';
 
 const LEVEL_COUNT = 100;
+const MAX_HEARTS = 3;
+const MAX_HINTS = 3;
 const DIFFS = {
   normal: { label: 'Normaal', salt: 1, size: (lvl) => (lvl <= 20 ? 6 : 7) },
   hard: { label: 'Moeilijk', salt: 2, size: () => 8 },
@@ -12,13 +14,16 @@ const PALETTE = [
 ];
 const EMPTY = 0, MARK = 1, CAT = 2, LOCKED = 3;
 
-const CAT_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true">
+const CAT_SVG = `<svg class="cat" viewBox="0 0 100 100" aria-hidden="true">
   <path d="M18 42 L22 8 L43 27 Q50 25 57 27 L78 8 L82 42 Q91 62 80 78 Q68 93 50 93 Q32 93 20 78 Q9 62 18 42Z" fill="#433a52"/>
   <path d="M25 19 L36 29 L26 35Z M75 19 L64 29 L74 35Z" fill="#f4a6b8"/>
   <ellipse cx="37" cy="56" rx="7.5" ry="8.5" fill="#fff"/><ellipse cx="63" cy="56" rx="7.5" ry="8.5" fill="#fff"/>
   <ellipse cx="38" cy="57" rx="3.5" ry="5.5" fill="#222"/><ellipse cx="62" cy="57" rx="3.5" ry="5.5" fill="#222"/>
   <path d="M46 69 L54 69 L50 74Z" fill="#f4a6b8"/>
   <path d="M50 74 Q46 80 41 77 M50 74 Q54 80 59 77" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+</svg>`;
+const X_SVG = `<svg class="xmark" viewBox="0 0 100 100" aria-hidden="true">
+  <line x1="18" y1="18" x2="82" y2="82"/><line x1="82" y1="18" x2="18" y2="82"/>
 </svg>`;
 
 const $ = (id) => document.getElementById(id);
@@ -35,6 +40,8 @@ const state = {
   puzzle: null,
   colors: [],
   cells: [],
+  hearts: MAX_HEARTS,
+  hintsLeft: MAX_HINTS,
   history: [],
   over: false,
   busy: false,
@@ -107,6 +114,8 @@ function resetPlay() {
   state.cells = new Array(n * n).fill(EMPTY);
   state.cells[starter * n + sol[starter]] = LOCKED;
   state.history = [];
+  state.hearts = MAX_HEARTS;
+  state.hintsLeft = MAX_HINTS;
   state.over = false;
   state.playId++;
   boardEl.classList.remove('won');
@@ -114,6 +123,7 @@ function resetPlay() {
   clearExplanation();
   cellEls.forEach((_, i) => paintCell(i));
   renderCounter();
+  renderHearts();
   updateButtons();
   startTimer();
 }
@@ -124,17 +134,52 @@ function paintCell(i, pop = false) {
   const d = cellEls[i], s = state.cells[i];
   d.classList.toggle('locked', s === LOCKED);
   d.classList.toggle('pop', pop);
-  d.innerHTML = s === MARK ? '<span class="mark">×</span>' : s >= CAT ? CAT_SVG : '';
+  d.innerHTML = s === MARK ? X_SVG : s >= CAT ? CAT_SVG : '';
+  if (pop) {
+    clearTimeout(d.popTimer);
+    d.popTimer = setTimeout(() => d.classList.remove('pop'), 900);
+  }
+}
+
+function cellCenter(i, dy = 0.5) {
+  const r = cellEls[i].getBoundingClientRect();
+  return [r.left + r.width / 2, r.top + r.height * dy, r.width];
+}
+
+function celebrateCat(i) {
+  const [x, y, w] = cellCenter(i, 0.3);
+  const colors = [state.colors[state.puzzle.reg[i]], '#fff', '#ffd166', '#f28b82', '#8bb4f0'];
+  setTimeout(() => fx.burst(x, y, 30, colors, w / 70), 200);
+}
+
+function poof(i) {
+  const [x, y, w] = cellCenter(i);
+  fx.burst(x, y, 14, ['#d8d2e0', '#fff', '#b8bec6'], w / 140);
 }
 
 function renderCounter() {
   const cats = state.cells.filter((s) => s >= CAT).length;
-  $('counterText').textContent = `${cats}/${state.puzzle.n}`;
+  const text = `${cats}/${state.puzzle.n}`;
+  const el = $('counterText');
+  if (el.textContent === text) return;
+  el.textContent = text;
+  const counter = $('counter');
+  counter.classList.remove('bump');
+  void counter.offsetWidth;
+  counter.classList.add('bump');
+}
+
+function renderHearts(justLost = false) {
+  $('hearts').innerHTML = Array.from({ length: MAX_HEARTS }, (_, k) => {
+    const cls = k < state.hearts ? '' : k === state.hearts && justLost ? 'lost breaking' : 'lost';
+    return `<span class="${cls}">♥</span>`;
+  }).join('');
 }
 
 function updateButtons() {
   $('btnUndo').disabled = state.over || !state.history.length;
-  $('btnHint').disabled = state.over;
+  $('btnHint').disabled = state.over || state.hintsLeft <= 0;
+  $('btnHint').textContent = `Hint (${state.hintsLeft})`;
 }
 
 const fmt = (ms) => {
@@ -173,6 +218,7 @@ function tryPlaceCat(i) {
   if (!conflict) {
     pushHistory();
     setCell(i, CAT, true);
+    celebrateCat(i);
     checkWin();
     return;
   }
@@ -187,6 +233,31 @@ function tryPlaceCat(i) {
     d.classList.remove('wrong');
     if (playId === state.playId) paintCell(i);
   }, 600);
+  loseHeart();
+}
+
+function loseHeart() {
+  state.hearts--;
+  renderHearts(true);
+  const heart = $('hearts').children[state.hearts].getBoundingClientRect();
+  fx.burst(heart.left + heart.width / 2, heart.top + heart.height / 2, 18, ['#e5484d', '#ff9a9a', '#fff'], 0.7);
+  boardEl.classList.remove('hurt');
+  void boardEl.offsetWidth;
+  boardEl.classList.add('hurt');
+  if (state.hearts > 0) return;
+
+  state.over = true;
+  stopTimer();
+  clearHint();
+  updateButtons();
+  const playId = state.playId;
+  setTimeout(() => {
+    if (playId !== state.playId) return;
+    showModal('Oei, geen hartjes meer', '<p>Drie keer gebotst, de katten zijn boos. Begin het level opnieuw!</p>', [
+      { label: 'Levels', action: openLevels },
+      { label: 'Opnieuw', primary: true, action: resetPlay },
+    ]);
+  }, 1000);
 }
 
 function findConflict(i) {
@@ -232,6 +303,9 @@ function checkWin() {
   if (!solved.includes(state.level)) solved.push(state.level);
   saveProgress();
   boardEl.classList.add('won');
+  const n = state.puzzle.n;
+  cellEls.forEach((el, k) => el.style.setProperty('--wave', `${((k % n) + Math.floor(k / n)) * 70}ms`));
+  setTimeout(() => fx.show([...state.colors, '#fff', '#ffd166']), 500);
   updateButtons();
 
   const buttons = [{ label: 'Opnieuw spelen', action: resetPlay }];
@@ -242,7 +316,7 @@ function checkWin() {
   setTimeout(() => {
     if (playId !== state.playId) return;
     showModal('Miauw! Opgelost', `<p>Level ${state.level} (${DIFFS[state.diff].label}) in <b>${fmt(time)}</b>.</p>`, buttons);
-  }, 900);
+  }, 2600);
 }
 
 function undo() {
@@ -256,10 +330,11 @@ function undo() {
 
 // Points at the solution cell of the region with the fewest cells still open given the placed cats.
 function hint() {
-  if (state.over || state.busy) return;
+  if (state.over || state.busy || state.hintsLeft <= 0) return;
   const { n, reg, sol } = state.puzzle;
   const misplaced = state.cells.findIndex((s, i) => s === CAT && sol[Math.floor(i / n)] !== i % n);
   if (misplaced >= 0) {
+    useHint();
     showExplanation({ cells: [misplaced], text: 'Deze kat staat niet op de goede plek. Haal hem weg en probeer het opnieuw.' });
     return;
   }
@@ -279,10 +354,16 @@ function hint() {
   }
   if (best < 0) return;
 
+  useHint();
   clearHint();
   const el = cellEls[best * n + sol[best]];
   el.classList.add('hint');
   hintTimer = setTimeout(clearHint, 3000);
+}
+
+function useHint() {
+  state.hintsLeft--;
+  updateButtons();
 }
 
 function clearHint() {
@@ -301,7 +382,7 @@ boardEl.addEventListener('pointerdown', (e) => {
   drag = { start: i, startState: s, mode: null, moved: false };
   if (s === EMPTY) {
     pushHistory();
-    setCell(i, MARK);
+    setCell(i, MARK, true);
     drag.mode = 'mark';
   } else if (s === MARK) {
     drag.mode = 'pending';
@@ -320,7 +401,7 @@ boardEl.addEventListener('pointermove', (e) => {
     setCell(drag.start, EMPTY);
     drag.mode = 'erase';
   }
-  if (drag.mode === 'mark' && state.cells[j] === EMPTY) setCell(j, MARK);
+  if (drag.mode === 'mark' && state.cells[j] === EMPTY) setCell(j, MARK, true);
   if (drag.mode === 'erase' && state.cells[j] === MARK) setCell(j, EMPTY);
 });
 
@@ -333,6 +414,7 @@ window.addEventListener('pointerup', () => {
   else if (startState === CAT) {
     pushHistory();
     setCell(start, EMPTY);
+    poof(start);
   }
 });
 
@@ -392,8 +474,8 @@ function openHelp() {
       <li><b>Eén kat per rij en kolom</b> &ndash; katten delen nooit een rij of kolom.</li>
       <li><b>Niet aanraken</b> &ndash; ook diagonaal mogen katten elkaar niet raken.</li>
       <li><b>Bediening</b> &ndash; 1e klik zet een X, 2e klik een kat, 3e klik wist. Sleep over lege vakjes om snel X'en te zetten.</li>
-      <li><b>Botsing</b> &ndash; een kat die botst met een kat die er al staat wordt niet geplaatst; je ziet waarom.</li>
-      <li><b>Hint</b> &ndash; wijst een nuttig vakje aan, of een kat die niet goed staat.</li>
+      <li><b>Hartjes</b> &ndash; een kat die botst met een kat die er al staat kost een hartje. Na 3 fouten moet je het level opnieuw beginnen.</li>
+      <li><b>Hint</b> &ndash; maximaal 3 per level. Wijst een nuttig vakje aan, of een kat die niet goed staat.</li>
       <li>Begin bij de kat die al op het bord staat.</li>
     </ul>`, [{ label: 'Spelen', primary: true }]);
 }

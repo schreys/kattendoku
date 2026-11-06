@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kattendoku</title>
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
   <main class="app">
@@ -19,9 +19,12 @@
 
     <section class="status">
       <div id="levelLabel">Level 1</div>
-      <div id="counter" class="counter" aria-label="Geplaatste katten">
-        <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M18 42 L22 8 L43 27 Q50 25 57 27 L78 8 L82 42 Q91 62 80 78 Q68 93 50 93 Q32 93 20 78 Q9 62 18 42Z" fill="currentColor"/></svg>
-        <span id="counterText">0/0</span>
+      <div class="status-center">
+        <div id="counter" class="counter" aria-label="Geplaatste katten">
+          <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M18 42 L22 8 L43 27 Q50 25 57 27 L78 8 L82 42 Q91 62 80 78 Q68 93 50 93 Q32 93 20 78 Q9 62 18 42Z" fill="currentColor"/></svg>
+          <span id="counterText">0/0</span>
+        </div>
+        <div id="hearts" class="hearts" aria-label="Hartjes"></div>
       </div>
       <div id="timer">00:00</div>
     </section>
@@ -49,7 +52,8 @@
     </div>
   </div>
 
-  <script src="generator.js?v=3"></script>
-  <script src="game.js?v=3"></script>
+  <script src="generator.js?v=9"></script>
+  <script src="fx.js?v=9"></script>
+  <script src="game.js?v=9"></script>
 </body>
 </html>
