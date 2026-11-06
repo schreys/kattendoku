@@ -5,6 +5,7 @@ create table public.scores (
   name_key text generated always as (lower(name)) stored,
   level int not null check (level between 1 and 100),
   time_ms int not null check (time_ms between 1000 and 86400000),
+  flawless boolean not null default false,
   created_at timestamptz not null default now()
 );
 

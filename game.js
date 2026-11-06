@@ -15,6 +15,15 @@ const SIZE_BANDS = [
 const CANDIDATES = 5;
 // Up to this level a cat is already on the board to start from.
 const STARTER_LEVELS = 25;
+// Gold/silver time limits; bigger boards (8×8 and up) get extra time.
+const MEDAL_LIMITS_MS = [30000, 90000];
+const BIG_BOARD_BONUS_MS = 30000;
+const MEDALS = [
+  { icon: "🥇", name: "Goud" },
+  { icon: "🥈", name: "Zilver" },
+  { icon: "🥉", name: "Brons" },
+];
+const FLAWLESS_ICON = "🐾";
 const PALETTE = [
   "#f28b82",
   "#fbbc6c",
@@ -83,6 +92,7 @@ function loadProgress() {
     p.solved = [];
     p.current = 1;
   }
+  if (!Array.isArray(p.flawless)) p.flawless = [];
   delete p.lastDiff;
   return p;
 }
@@ -420,6 +430,9 @@ function checkWin() {
   const time = stopTimer();
   const solved = progress.solved;
   if (!solved.includes(state.level)) solved.push(state.level);
+  const flawless = state.hearts === MAX_HEARTS;
+  if (flawless && !progress.flawless.includes(state.level))
+    progress.flawless.push(state.level);
   saveProgress();
   state.best[state.level] = Math.min(state.best[state.level] ?? Infinity, time);
   boardEl.classList.add("won");
@@ -439,16 +452,36 @@ function checkWin() {
     });
   }
   const playId = state.playId;
-  const pending = submitScore(state.level, time);
+  const pending = submitScore(state.level, time, flawless);
+  const medal = medalFor(state.level, time);
   setTimeout(() => {
     if (playId !== state.playId) return;
     const body = document.createElement("div");
+    const award = document.createElement("div");
+    award.className = "award";
+    award.innerHTML = `<span class="medal">${medal.icon}</span><b>${medal.name}!</b>`;
     const p = document.createElement("p");
     p.innerHTML = `Level ${state.level} in <b>${fmtPrecise(time)}</b>.`;
-    body.append(p, scoreList(state.level, pending));
+    body.append(award, p);
+    if (flawless) {
+      const f = document.createElement("p");
+      f.className = "flawless";
+      f.textContent = `${FLAWLESS_ICON} Flawless victory! ${FLAWLESS_ICON}`;
+      body.append(f);
+    }
+    body.append(scoreList(state.level, pending));
     showModal("Miauw! Opgelost", body, buttons);
   }, 2600);
 }
+
+function medalFor(level, ms) {
+  const bonus = levelSpec(level).size >= 8 ? BIG_BOARD_BONUS_MS : 0;
+  const rank = MEDAL_LIMITS_MS.findIndex((limit) => ms <= limit + bonus);
+  return MEDALS[rank < 0 ? MEDALS.length - 1 : rank];
+}
+
+const scoreLabel = (level, ms, flawless) =>
+  `${flawless ? FLAWLESS_ICON + " " : ""}${medalFor(level, ms).icon} ${fmtPrecise(ms)}`;
 
 // ---------- Highscores ----------
 
@@ -486,7 +519,7 @@ async function hsFetchAll(path) {
   }
 }
 
-function submitScore(level, timeMs) {
+function submitScore(level, timeMs, flawless) {
   if (!hsEnabled || !progress.playerName) return Promise.resolve();
   return hsFetch("scores", {
     method: "POST",
@@ -495,6 +528,7 @@ function submitScore(level, timeMs) {
       name: progress.playerName,
       level,
       time_ms: Math.round(timeMs),
+      flawless,
     }),
   });
 }
@@ -510,7 +544,7 @@ async function syncProgress() {
   if (!hsEnabled || !progress.playerName) return false;
   const before = startLevel();
   const rows = await hsFetchAll(
-    `scores?select=name,level,time_ms&name_key=eq.${pgValue(nameKey(progress.playerName))}&order=id.asc`,
+    `scores?select=name,level,time_ms,flawless&name_key=eq.${pgValue(nameKey(progress.playerName))}&order=id.asc`,
   );
   // The first spelling a player ever used stays their display name.
   if (rows.length) progress.playerName = rows[0].name;
@@ -521,6 +555,8 @@ async function syncProgress() {
       added = true;
     }
     state.best[r.level] = Math.min(state.best[r.level] ?? Infinity, r.time_ms);
+    if (r.flawless && !progress.flawless.includes(r.level))
+      progress.flawless.push(r.level);
   }
   if (added) progress.current = Math.max(progress.current, maxUnlocked());
   saveProgress();
@@ -530,6 +566,7 @@ async function syncProgress() {
 function switchPlayer(name) {
   if (progress.playerName && nameKey(progress.playerName) !== nameKey(name)) {
     progress.solved = [];
+    progress.flawless = [];
     progress.current = 1;
   }
   progress.playerName = name;
@@ -541,7 +578,7 @@ function switchPlayer(name) {
 }
 
 async function fetchTop(level) {
-  const query = `scores?select=name,time_ms&level=eq.${Number(level)}&order=time_ms.asc&limit=200`;
+  const query = `scores?select=name,time_ms,flawless&level=eq.${Number(level)}&order=time_ms.asc&limit=200`;
   const rows = await hsFetch(query);
   const seen = new Set();
   const best = [];
@@ -557,7 +594,7 @@ async function fetchTop(level) {
 // All scores grouped per level with one (best) entry per player, fastest first.
 async function fetchBoard() {
   const rows = await hsFetchAll(
-    `scores?select=name,level,time_ms&order=time_ms.asc,id.asc`,
+    `scores?select=name,level,time_ms,flawless&order=time_ms.asc,id.asc`,
   );
   const levels = new Map();
   for (const r of rows) {
@@ -616,7 +653,7 @@ function scoreList(level, pending = Promise.resolve()) {
           rankList(
             rows,
             (r) => r.name,
-            (r) => fmtPrecise(r.time_ms),
+            (r) => scoreLabel(level, r.time_ms, r.flawless),
           ),
         );
     },
@@ -642,14 +679,14 @@ function allLevelsList() {
         const mine = document.createElement("span");
         const me = list.findIndex((r) => isMe(r.name));
         if (me >= 0)
-          mine.textContent = `jij: #${me + 1} · ${fmtPrecise(list[me].time_ms)}`;
+          mine.textContent = `jij: #${me + 1} · ${scoreLabel(level, list[me].time_ms, list[me].flawless)}`;
         head.append(title, mine);
         block.append(
           head,
           rankList(
             list.slice(0, 3),
             (r) => r.name,
-            (r) => fmtPrecise(r.time_ms),
+            (r) => scoreLabel(level, r.time_ms, r.flawless),
           ),
         );
         wrap.append(block);
@@ -935,6 +972,7 @@ function openLevels() {
   const grid = document.createElement("div");
   grid.className = "level-grid";
   const solved = new Set(progress.solved);
+  const flawless = new Set(progress.flawless);
   const best = state.best;
   const max = maxUnlocked();
   for (let l = 1; l <= LEVEL_COUNT; l++) {
@@ -942,10 +980,11 @@ function openLevels() {
     b.textContent = l;
     if (best[l]) {
       const t = document.createElement("small");
-      t.textContent = fmt(best[l]);
+      t.textContent = `${medalFor(l, best[l]).icon} ${fmt(best[l])}`;
       b.append(t);
     }
     b.classList.toggle("done", solved.has(l));
+    b.classList.toggle("flawless", flawless.has(l));
     b.classList.toggle("current", l === state.level);
     b.disabled = l > max;
     b.onclick = () => {
@@ -968,6 +1007,7 @@ function openHelp() {
       <li><b>Bediening</b> &ndash; klik zet een X of haalt hem weg, dubbelklik zet een kat. Een geplaatste kat blijft staan. Sleep over lege vakjes om snel X'en te zetten.</li>
       <li><b>Hartjes</b> &ndash; een kat op een verkeerde plek kost een hartje, ook als hij met geen enkele andere kat botst. Na 3 fouten moet je het level opnieuw beginnen. Denk dus goed na voor je een kat zet!</li>
       <li><b>Hint</b> &ndash; maximaal 3 per level. Wijst een nuttig vakje aan.</li>
+      <li><b>Medailles</b> &ndash; 🥇 binnen 30 seconden, 🥈 binnen 1,5 minuut, anders 🥉. Vanaf 8&times;8 krijg je telkens 30 seconden extra. Geen hartje verloren? Dan is het een ${FLAWLESS_ICON} flawless victory!</li>
       <li>Tot level ${STARTER_LEVELS} staat er al een kat op het bord: begin daar. Daarna start je met een leeg bord.</li>
     </ul>`,
     [{ label: "Spelen", primary: true }],

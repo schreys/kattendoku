@@ -457,6 +457,7 @@ h1 {
 }
 
 .level-grid button {
+  position: relative;
   padding: 8px 0;
   border: 0;
   border-radius: 10px;
@@ -477,6 +478,13 @@ h1 {
 
 .level-grid button.done {
   background: #c8ecc0;
+}
+.level-grid button.flawless::after {
+  content: "🐾";
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 10px;
 }
 .level-grid button.current {
   outline: 2px solid var(--accent);
@@ -508,6 +516,34 @@ h1 {
 .scores {
   min-height: 40px;
   color: rgba(58, 51, 70, 0.75);
+}
+
+.award {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 22px;
+}
+.award .medal {
+  font-size: 52px;
+  animation: medalPop 0.7s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+.flawless {
+  text-align: center;
+  font-weight: 800;
+  color: var(--accent);
+  animation: medalPop 0.7s 0.3s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes medalPop {
+  from {
+    transform: scale(0) rotate(-30deg);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
 }
 .scores ol {
   list-style: none;
