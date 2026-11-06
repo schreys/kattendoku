@@ -470,8 +470,10 @@ async function syncProgress() {
   if (!hsEnabled || !progress.playerName) return false;
   const before = startLevel();
   const rows = await hsFetchAll(
-    `scores?select=level,time_ms&name_key=eq.${pgValue(nameKey(progress.playerName))}&order=id.asc`,
+    `scores?select=name,level,time_ms&name_key=eq.${pgValue(nameKey(progress.playerName))}&order=id.asc`,
   );
+  // The first spelling a player ever used stays their display name.
+  if (rows.length) progress.playerName = rows[0].name;
   let added = false;
   for (const r of rows) {
     if (!progress.solved.includes(r.level)) {
@@ -690,6 +692,7 @@ function askName(then) {
     else {
       progress.playerName = name;
       saveProgress();
+      syncProgress().catch(() => {});
     }
     return true;
   };
