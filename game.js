@@ -58,7 +58,6 @@ const state = {
   hearts: MAX_HEARTS,
   hintsLeft: MAX_HINTS,
   best: {},
-  history: [],
   over: false,
   busy: false,
   playId: 0,
@@ -152,7 +151,7 @@ function buildBoard() {
     const d = document.createElement("div");
     d.className = "cell";
     d.dataset.i = i;
-    d.style.background = state.colors[reg[i]];
+    d.style.setProperty("--c", state.colors[reg[i]]);
     boardEl.appendChild(d);
     cellEls.push(d);
   }
@@ -162,7 +161,6 @@ function resetPlay() {
   const { n, sol, starter } = state.puzzle;
   state.cells = new Array(n * n).fill(EMPTY);
   state.cells[starter * n + sol[starter]] = LOCKED;
-  state.history = [];
   state.hearts = MAX_HEARTS;
   state.hintsLeft = MAX_HINTS;
   state.over = false;
@@ -214,7 +212,15 @@ function poof(i) {
   fx.burst(x, y, 14, ["#d8d2e0", "#fff", "#b8bec6"], w / 140);
 }
 
+function renderRegions() {
+  const { reg } = state.puzzle;
+  const done = new Set();
+  state.cells.forEach((s, i) => s >= CAT && done.add(reg[i]));
+  cellEls.forEach((el, i) => el.classList.toggle("done", done.has(reg[i])));
+}
+
 function renderCounter() {
+  renderRegions();
   const cats = state.cells.filter((s) => s >= CAT).length;
   const text = `${cats}/${state.puzzle.n}`;
   const el = $("counterText");
@@ -239,7 +245,6 @@ function renderHearts(justLost = false) {
 }
 
 function updateButtons() {
-  $("btnUndo").disabled = state.over || !state.history.length;
   $("btnHint").disabled = state.over || state.hintsLeft <= 0;
   $("btnHint").textContent = `Hint (${state.hintsLeft})`;
 }
@@ -302,11 +307,6 @@ document.addEventListener("pointerdown", () => {
 
 // ---------- Game actions ----------
 
-function pushHistory() {
-  state.history.push(state.cells.slice());
-  updateButtons();
-}
-
 function setCell(i, v, pop = false) {
   state.cells[i] = v;
   paintCell(i, pop);
@@ -317,7 +317,6 @@ function tryPlaceCat(i) {
   clearHint();
   const conflict = findConflict(i);
   if (!conflict) {
-    pushHistory();
     setCell(i, CAT, true);
     celebrateCat(i);
     checkWin();
@@ -775,15 +774,6 @@ function openScores(view = "level") {
   ]);
 }
 
-function undo() {
-  if (state.over || !state.history.length) return;
-  clearHint();
-  state.cells = state.history.pop();
-  cellEls.forEach((_, i) => paintCell(i));
-  renderCounter();
-  updateButtons();
-}
-
 // Points at the solution cell of the region with the fewest cells still open given the placed cats.
 function hint() {
   if (state.over || state.busy || state.hintsLeft <= 0) return;
@@ -865,10 +855,8 @@ boardEl.addEventListener("pointerdown", (e) => {
     mode: null,
     moved: false,
     cells: state.cells.slice(),
-    historyLength: state.history.length,
   };
   if (s === EMPTY) {
-    pushHistory();
     setCell(i, MARK, true);
     drag.mode = "mark";
   } else if (s === MARK) {
@@ -884,7 +872,6 @@ boardEl.addEventListener("pointermove", (e) => {
   if (j === drag.start && !drag.moved) return;
   drag.moved = true;
   if (drag.mode === "pending") {
-    pushHistory();
     setCell(drag.start, EMPTY);
     drag.mode = "erase";
   }
@@ -894,7 +881,7 @@ boardEl.addEventListener("pointermove", (e) => {
 
 window.addEventListener("pointerup", () => {
   if (!drag) return;
-  const { start, startState, moved, cells, historyLength } = drag;
+  const { start, startState, moved, cells } = drag;
   drag = null;
   if (moved || state.over) {
     lastTap = null;
@@ -903,24 +890,22 @@ window.addEventListener("pointerup", () => {
 
   const now = performance.now();
   if (lastTap && lastTap.i === start && now - lastTap.t < DOUBLE_TAP_MS) {
-    // Double tap: undo what the first tap did, then try to place a cat.
+    // Double tap: revert what the first tap did, then try to place a cat.
     const before = lastTap;
     lastTap = null;
+    const wasCat = before.cells[start] === CAT;
     state.cells = before.cells;
-    state.history.length = before.historyLength;
+    if (wasCat) state.cells[start] = EMPTY;
     paintCell(start);
     renderCounter();
-    updateButtons();
-    if (state.cells[start] < CAT) tryPlaceCat(start);
+    if (!wasCat && state.cells[start] < CAT) tryPlaceCat(start);
     return;
   }
-  lastTap = { i: start, t: now, cells, historyLength };
+  lastTap = { i: start, t: now, cells };
 
   if (startState === MARK) {
-    pushHistory();
     setCell(start, EMPTY);
   } else if (startState === CAT) {
-    pushHistory();
     setCell(start, EMPTY);
     poof(start);
   }
@@ -928,13 +913,6 @@ window.addEventListener("pointerup", () => {
 
 window.addEventListener("pointercancel", () => {
   drag = null;
-});
-
-window.addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "z") {
-    e.preventDefault();
-    undo();
-  }
 });
 
 // ---------- Modals ----------
@@ -1013,7 +991,6 @@ $("modal").addEventListener("click", (e) => {
 });
 $("btnLevels").onclick = openLevels;
 $("btnHint").onclick = hint;
-$("btnUndo").onclick = undo;
 $("btnRestart").onclick = () => {
   if (!state.busy) resetPlay();
 };
@@ -1031,7 +1008,8 @@ if (progress.playerName) {
   firstHelp();
   syncProgress()
     .then((moved) => {
-      if (moved && !state.history.length) loadLevel(startLevel());
+      const untouched = !state.cells.some((s) => s === MARK || s === CAT);
+      if (moved && untouched) loadLevel(startLevel());
     })
     .catch(() => {});
 } else {
