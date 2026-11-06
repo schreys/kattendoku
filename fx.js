@@ -1,12 +1,12 @@
-'use strict';
+"use strict";
 
 // Canvas particle effects (sparkles, fireworks) drawn over the whole page.
 const fx = (() => {
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const canvas = document.createElement('canvas');
-  canvas.className = 'fx';
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const canvas = document.createElement("canvas");
+  canvas.className = "fx";
   document.body.appendChild(canvas);
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
   let parts = [];
   let running = false;
 
@@ -16,12 +16,15 @@ const fx = (() => {
     canvas.height = innerHeight * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   };
-  addEventListener('resize', resize);
+  addEventListener("resize", resize);
   resize();
 
   const start = () => {
     if (running) return;
-    if (canvas.width !== Math.round(innerWidth * (window.devicePixelRatio || 1))) resize();
+    if (
+      canvas.width !== Math.round(innerWidth * (window.devicePixelRatio || 1))
+    )
+      resize();
     running = true;
     requestAnimationFrame(tick);
   };
@@ -32,7 +35,8 @@ const fx = (() => {
       const a = Math.random() * Math.PI * 2;
       const s = (1.5 + Math.random() * 4) * power;
       parts.push({
-        x, y,
+        x,
+        y,
         vx: Math.cos(a) * s,
         vy: Math.sin(a) * s - 1.2 * power,
         g: 0.12,
@@ -51,10 +55,17 @@ const fx = (() => {
     const g = 0.15;
     const height = innerHeight * (0.45 + Math.random() * 0.35);
     parts.push({
-      x, y: innerHeight + 10,
+      x,
+      y: innerHeight + 10,
       vx: (Math.random() - 0.5) * 2,
       vy: -Math.sqrt(2 * g * height),
-      g, life: 1, decay: 0, size: 3, color: '#fff', rocket: true, colors,
+      g,
+      life: 1,
+      decay: 0,
+      size: 3,
+      color: "#fff",
+      rocket: true,
+      colors,
     });
     start();
   }
@@ -62,7 +73,10 @@ const fx = (() => {
   function show(colors, duration = 2400, shots = 12) {
     if (reduced) return;
     for (let k = 0; k < shots; k++) {
-      setTimeout(() => rocket(innerWidth * (0.12 + Math.random() * 0.76), colors), (k / shots) * duration);
+      setTimeout(
+        () => rocket(innerWidth * (0.12 + Math.random() * 0.76), colors),
+        (k / shots) * duration,
+      );
     }
   }
 
@@ -100,8 +114,17 @@ const fx = (() => {
           burst(p.x, p.y, 80, p.colors, 1.7);
           continue;
         }
-        parts.push({ x: p.x, y: p.y, vx: (Math.random() - 0.5), vy: Math.random(), g: 0.04,
-          life: 0.7, decay: 0.04, size: 1.6, color: '#ffd166' });
+        parts.push({
+          x: p.x,
+          y: p.y,
+          vx: Math.random() - 0.5,
+          vy: Math.random(),
+          g: 0.04,
+          life: 0.7,
+          decay: 0.04,
+          size: 1.6,
+          color: "#ffd166",
+        });
       }
       if (p.life <= 0) continue;
 

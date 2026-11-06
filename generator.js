@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -19,7 +19,9 @@ function shuffle(arr, rnd) {
 }
 
 function neighbors4(i, n) {
-  const r = Math.floor(i / n), c = i % n, out = [];
+  const r = Math.floor(i / n),
+    c = i % n,
+    out = [];
   if (r > 0) out.push(i - n);
   if (r < n - 1) out.push(i + n);
   if (c > 0) out.push(i - 1);
@@ -49,7 +51,9 @@ function makeSolution(n, rnd) {
 // Region r is seeded at the cat of row r and grows randomly until the grid is full.
 function growRegions(n, sol, rnd) {
   const reg = new Array(n * n).fill(-1);
-  sol.forEach((c, r) => { reg[r * n + c] = r; });
+  sol.forEach((c, r) => {
+    reg[r * n + c] = r;
+  });
   let left = n * n - n;
   while (left > 0) {
     const i = Math.floor(rnd() * n * n);
@@ -117,14 +121,25 @@ function generatePuzzle(n, seed) {
     let unique = false;
     for (let step = 0; step < n * n * 4; step++) {
       const alt = findAlternative(n, reg, sol);
-      if (!alt) { unique = true; break; }
+      if (!alt) {
+        unique = true;
+        break;
+      }
       // Move one of the alternative's cats into a neighbouring region, which invalidates that alternative.
       const candidates = [];
       alt.forEach((c, r) => {
         if (c === sol[r]) return;
-        const i = r * n + c, g = reg[i];
-        const targets = [...new Set(neighbors4(i, n).map((j) => reg[j]).filter((h) => h !== g))];
-        if (targets.length && staysConnected(n, reg, g, i, g * n + sol[g])) candidates.push([i, targets]);
+        const i = r * n + c,
+          g = reg[i];
+        const targets = [
+          ...new Set(
+            neighbors4(i, n)
+              .map((j) => reg[j])
+              .filter((h) => h !== g),
+          ),
+        ];
+        if (targets.length && staysConnected(n, reg, g, i, g * n + sol[g]))
+          candidates.push([i, targets]);
       });
       if (!candidates.length) break;
       const [i, targets] = candidates[Math.floor(rnd() * candidates.length)];
@@ -134,4 +149,67 @@ function generatePuzzle(n, seed) {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { generatePuzzle, mulberry32, shuffle, findAlternative };
+// Difficulty score: solve with simple logic (singles + "this cat would empty a row/column/region").
+// Each elimination step adds 1; needing deeper reasoning than that adds 1000.
+function rateDifficulty({ n, reg, sol, starter }) {
+  const N = n * n;
+  const r = (i) => Math.floor(i / n),
+    c = (i) => i % n;
+  const clash = (a, b) =>
+    r(a) === r(b) ||
+    c(a) === c(b) ||
+    reg[a] === reg[b] ||
+    (Math.abs(r(a) - r(b)) <= 1 && Math.abs(c(a) - c(b)) <= 1);
+  const units = [];
+  for (let k = 0; k < n; k++) {
+    units.push([...Array(n).keys()].map((x) => k * n + x));
+    units.push([...Array(n).keys()].map((x) => x * n + k));
+    units.push([...Array(N).keys()].filter((i) => reg[i] === k));
+  }
+  const open = new Array(N).fill(true);
+  const placed = new Set();
+  const place = (i) => {
+    placed.add(i);
+    for (let j = 0; j < N; j++) if (open[j] && clash(i, j)) open[j] = false;
+  };
+  const done = (u) => u.some((i) => placed.has(i));
+
+  place(starter * n + sol[starter]);
+  let steps = 0;
+  while (placed.size < n) {
+    const single = units.find(
+      (u) => !done(u) && u.filter((i) => open[i]).length === 1,
+    );
+    if (single) {
+      place(single.find((i) => open[i]));
+      continue;
+    }
+    let eliminated = false;
+    for (let i = 0; i < N && !eliminated; i++) {
+      if (!open[i]) continue;
+      if (
+        units.some(
+          (u) =>
+            !done(u) &&
+            !u.includes(i) &&
+            u.every((j) => !open[j] || clash(i, j)),
+        )
+      ) {
+        open[i] = false;
+        steps++;
+        eliminated = true;
+      }
+    }
+    if (!eliminated) return 1000 + steps;
+  }
+  return steps;
+}
+
+if (typeof module !== "undefined")
+  module.exports = {
+    generatePuzzle,
+    rateDifficulty,
+    mulberry32,
+    shuffle,
+    findAlternative,
+  };
