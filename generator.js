@@ -112,6 +112,41 @@ function staysConnected(n, reg, g, removed, start) {
   return seen.size === total;
 }
 
+// Smaller regions would give away where their cat goes.
+const MIN_REGION = 3;
+
+// Grows regions below MIN_REGION with a neighbouring cell from a bigger region,
+// keeping only moves after which the puzzle still has exactly one solution.
+function growSmallRegions(n, reg, sol, rnd) {
+  const size = new Array(n).fill(0);
+  reg.forEach((g) => size[g]++);
+  for (;;) {
+    const small = [...size.keys()].filter((g) => size[g] < MIN_REGION);
+    if (!small.length) return true;
+    const g = small[Math.floor(rnd() * small.length)];
+    const options = [];
+    for (let i = 0; i < n * n; i++) {
+      const h = reg[i];
+      if (h === g || size[h] <= MIN_REGION || i === h * n + sol[h]) continue;
+      if (!neighbors4(i, n).some((j) => reg[j] === g)) continue;
+      if (staysConnected(n, reg, h, i, h * n + sol[h])) options.push(i);
+    }
+    let grown = false;
+    for (const i of shuffle(options, rnd)) {
+      const h = reg[i];
+      reg[i] = g;
+      if (!findAlternative(n, reg, sol)) {
+        size[h]--;
+        size[g]++;
+        grown = true;
+        break;
+      }
+      reg[i] = h;
+    }
+    if (!grown) return false;
+  }
+}
+
 // Builds an n×n puzzle with exactly one solution. Deterministic for a given seed.
 function generatePuzzle(n, seed) {
   const rnd = mulberry32(seed);
@@ -145,7 +180,8 @@ function generatePuzzle(n, seed) {
       const [i, targets] = candidates[Math.floor(rnd() * candidates.length)];
       reg[i] = targets[Math.floor(rnd() * targets.length)];
     }
-    if (unique) return { n, reg, sol, starter: Math.floor(rnd() * n) };
+    if (unique && growSmallRegions(n, reg, sol, rnd))
+      return { n, reg, sol, starter: Math.floor(rnd() * n) };
   }
 }
 
