@@ -18,6 +18,7 @@ const STARTER_LEVELS = 25;
 // Gold/silver time limits; bigger boards (8×8 and up) get extra time.
 const MEDAL_LIMITS_MS = [30000, 90000];
 const BIG_BOARD_BONUS_MS = 30000;
+const MEDAL_WARN_MS = 5000;
 const MEDALS = [
   { icon: "🥇", name: "Goud" },
   { icon: "🥈", name: "Zilver" },
@@ -266,15 +267,31 @@ const fmt = (ms) => {
 function startTimer() {
   clearInterval(state.timer);
   state.start = Date.now();
-  $("timer").textContent = fmt(0);
-  state.timer = setInterval(() => {
-    $("timer").textContent = fmt(Date.now() - state.start);
-  }, 1000);
+  $("timerMedal").textContent = "";
+  renderTimer();
+  state.timer = setInterval(renderTimer, 250);
   keepAwake();
+}
+
+// Shows the medal you'd get right now; it shakes during the last seconds before it drops.
+function renderTimer() {
+  const ms = Date.now() - state.start;
+  $("timer").textContent = fmt(ms);
+  const el = $("timerMedal");
+  const icon = medalFor(state.level, ms).icon;
+  if (el.textContent !== icon) {
+    el.textContent = icon;
+    el.classList.remove("drop");
+    void el.offsetWidth;
+    el.classList.add("drop");
+  }
+  const next = medalLimits(state.level).find((limit) => ms <= limit);
+  el.classList.toggle("warn", next !== undefined && next - ms <= MEDAL_WARN_MS);
 }
 
 function stopTimer() {
   clearInterval(state.timer);
+  $("timerMedal").classList.remove("warn");
   allowSleep();
   return Date.now() - state.start;
 }
@@ -474,9 +491,13 @@ function checkWin() {
   }, 2600);
 }
 
-function medalFor(level, ms) {
+function medalLimits(level) {
   const bonus = levelSpec(level).size >= 8 ? BIG_BOARD_BONUS_MS : 0;
-  const rank = MEDAL_LIMITS_MS.findIndex((limit) => ms <= limit + bonus);
+  return MEDAL_LIMITS_MS.map((limit) => limit + bonus);
+}
+
+function medalFor(level, ms) {
+  const rank = medalLimits(level).findIndex((limit) => ms <= limit);
   return MEDALS[rank < 0 ? MEDALS.length - 1 : rank];
 }
 

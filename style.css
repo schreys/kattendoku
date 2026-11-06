@@ -73,8 +73,32 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
-#timer {
+.timer {
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.timer-medal {
+  display: inline-block;
+}
+.timer-medal.drop {
+  animation: medalPop 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.timer-medal.warn {
+  animation: medalShake 0.5s ease-in-out infinite;
+}
+@keyframes medalShake {
+  0%,
+  100% {
+    transform: rotate(0) scale(1);
+  }
+  25% {
+    transform: rotate(-18deg) scale(1.15);
+  }
+  75% {
+    transform: rotate(18deg) scale(1.15);
+  }
 }
 .status-center {
   display: flex;
