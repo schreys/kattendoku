@@ -13,6 +13,8 @@ const SIZE_BANDS = [
 ];
 // Within a band, later levels pick harder puzzles out of this many candidates.
 const CANDIDATES = 5;
+// Up to this level a cat is already on the board to start from.
+const STARTER_LEVELS = 25;
 const PALETTE = [
   "#f28b82",
   "#fbbc6c",
@@ -110,6 +112,7 @@ function buildLevel(level) {
   const candidates = [];
   for (let k = 0; k < CANDIDATES; k++) {
     const p = generatePuzzle(size, (seed + k * 1000003) >>> 0);
+    if (level > STARTER_LEVELS) p.starter = null;
     p.score = rateDifficulty(p);
     candidates.push(p);
   }
@@ -160,7 +163,7 @@ function buildBoard() {
 function resetPlay() {
   const { n, sol, starter } = state.puzzle;
   state.cells = new Array(n * n).fill(EMPTY);
-  state.cells[starter * n + sol[starter]] = LOCKED;
+  if (starter != null) state.cells[starter * n + sol[starter]] = LOCKED;
   state.hearts = MAX_HEARTS;
   state.hintsLeft = MAX_HINTS;
   state.over = false;
@@ -182,6 +185,7 @@ function paintCell(i, pop = false) {
   const d = cellEls[i],
     s = state.cells[i];
   d.classList.toggle("locked", s === LOCKED);
+  d.classList.toggle("fixed", s >= CAT);
   d.classList.toggle("pop", pop);
   d.innerHTML = s === MARK ? X_SVG : s >= CAT ? CAT_SVG : "";
   if (pop) {
@@ -205,11 +209,6 @@ function celebrateCat(i) {
     "#8bb4f0",
   ];
   setTimeout(() => fx.burst(x, y, 30, colors, w / 70), 200);
-}
-
-function poof(i) {
-  const [x, y, w] = cellCenter(i);
-  fx.burst(x, y, 14, ["#d8d2e0", "#fff", "#b8bec6"], w / 140);
 }
 
 function renderRegions() {
@@ -315,7 +314,12 @@ function setCell(i, v, pop = false) {
 
 function tryPlaceCat(i) {
   clearHint();
-  const conflict = findConflict(i);
+  const { n, sol } = state.puzzle;
+  const conflict =
+    findConflict(i) ??
+    (sol[Math.floor(i / n)] !== i % n
+      ? { cells: [], text: "Hier hoort geen kat." }
+      : null);
   if (!conflict) {
     setCell(i, CAT, true);
     celebrateCat(i);
@@ -323,7 +327,7 @@ function tryPlaceCat(i) {
     return;
   }
 
-  // Clashing cat: explain why and keep the X.
+  // Wrong cat: explain why and keep the X.
   showExplanation(conflict);
   const d = cellEls[i];
   d.innerHTML = CAT_SVG;
@@ -361,7 +365,7 @@ function loseHeart() {
     if (playId !== state.playId) return;
     showModal(
       "Oei, geen hartjes meer",
-      "<p>Drie keer gebotst, de katten zijn boos. Begin het level opnieuw!</p>",
+      "<p>Drie keer mis, de katten zijn boos. Begin het level opnieuw!</p>",
       [
         { label: "Levels", action: openLevels },
         { label: "Opnieuw", primary: true, action: resetPlay },
@@ -778,17 +782,6 @@ function openScores(view = "level") {
 function hint() {
   if (state.over || state.busy || state.hintsLeft <= 0) return;
   const { n, reg, sol } = state.puzzle;
-  const misplaced = state.cells.findIndex(
-    (s, i) => s === CAT && sol[Math.floor(i / n)] !== i % n,
-  );
-  if (misplaced >= 0) {
-    useHint();
-    showExplanation({
-      cells: [misplaced],
-      text: "Deze kat staat niet op de goede plek. Haal hem weg en probeer het opnieuw.",
-    });
-    return;
-  }
   const cats = [];
   state.cells.forEach((s, i) => {
     if (s >= CAT) cats.push(i);
@@ -849,6 +842,8 @@ boardEl.addEventListener("pointerdown", (e) => {
   clearExplanation();
   const i = +d.dataset.i,
     s = state.cells[i];
+  // Placed cats are always correct, so they stay.
+  if (s >= CAT) return;
   drag = {
     start: i,
     startState: s,
@@ -893,22 +888,15 @@ window.addEventListener("pointerup", () => {
     // Double tap: revert what the first tap did, then try to place a cat.
     const before = lastTap;
     lastTap = null;
-    const wasCat = before.cells[start] === CAT;
     state.cells = before.cells;
-    if (wasCat) state.cells[start] = EMPTY;
     paintCell(start);
     renderCounter();
-    if (!wasCat && state.cells[start] < CAT) tryPlaceCat(start);
+    tryPlaceCat(start);
     return;
   }
   lastTap = { i: start, t: now, cells };
 
-  if (startState === MARK) {
-    setCell(start, EMPTY);
-  } else if (startState === CAT) {
-    setCell(start, EMPTY);
-    poof(start);
-  }
+  if (startState === MARK) setCell(start, EMPTY);
 });
 
 window.addEventListener("pointercancel", () => {
@@ -977,10 +965,10 @@ function openHelp() {
       <li><b>Eén kat per kleur</b> &ndash; elk gekleurd gebied krijgt precies één kat.</li>
       <li><b>Eén kat per rij en kolom</b> &ndash; katten delen nooit een rij of kolom.</li>
       <li><b>Niet aanraken</b> &ndash; ook diagonaal mogen katten elkaar niet raken.</li>
-      <li><b>Bediening</b> &ndash; klik zet een X of haalt hem weg, dubbelklik zet een kat, klik op een kat haalt hem weg. Sleep over lege vakjes om snel X'en te zetten.</li>
-      <li><b>Hartjes</b> &ndash; een kat die botst met een kat die er al staat kost een hartje. Na 3 fouten moet je het level opnieuw beginnen.</li>
-      <li><b>Hint</b> &ndash; maximaal 3 per level. Wijst een nuttig vakje aan, of een kat die niet goed staat.</li>
-      <li>Begin bij de kat die al op het bord staat.</li>
+      <li><b>Bediening</b> &ndash; klik zet een X of haalt hem weg, dubbelklik zet een kat. Een geplaatste kat blijft staan. Sleep over lege vakjes om snel X'en te zetten.</li>
+      <li><b>Hartjes</b> &ndash; een kat op een verkeerde plek kost een hartje, ook als hij met geen enkele andere kat botst. Na 3 fouten moet je het level opnieuw beginnen. Denk dus goed na voor je een kat zet!</li>
+      <li><b>Hint</b> &ndash; maximaal 3 per level. Wijst een nuttig vakje aan.</li>
+      <li>Tot level ${STARTER_LEVELS} staat er al een kat op het bord: begin daar. Daarna start je met een leeg bord.</li>
     </ul>`,
     [{ label: "Spelen", primary: true }],
   );

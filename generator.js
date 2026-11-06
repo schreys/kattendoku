@@ -210,7 +210,7 @@ function rateDifficulty({ n, reg, sol, starter }) {
   };
   const done = (u) => u.some((i) => placed.has(i));
 
-  place(starter * n + sol[starter]);
+  if (starter != null) place(starter * n + sol[starter]);
   let steps = 0;
   while (placed.size < n) {
     const single = units.find(

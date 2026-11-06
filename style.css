@@ -169,7 +169,7 @@ h1 {
 }
 
 @media (hover: hover) {
-  .cell:not(.locked):hover {
+  .cell:not(.fixed):hover {
     filter: brightness(1.06);
     transform: translateY(-2px) scale(1.05);
     box-shadow:
@@ -177,7 +177,7 @@ h1 {
       0 4px 10px rgba(58, 51, 70, 0.18);
     z-index: 1;
   }
-  .cell:not(.locked):hover svg {
+  .cell:not(.fixed):hover svg {
     animation: wiggle 0.5s ease-in-out;
   }
 }
@@ -201,6 +201,9 @@ h1 {
 }
 .board.won .cell.done {
   background: var(--c);
+}
+.cell.fixed {
+  cursor: default;
 }
 .cell.locked {
   cursor: not-allowed;
