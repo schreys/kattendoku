@@ -45,14 +45,16 @@ const state = {
 
 function loadProgress() {
   let p = {};
-  try { p = JSON.parse(localStorage.getItem('meowdoku-progress')) || {}; } catch { /* corrupt storage: start fresh */ }
+  // Fall back to the key used before the rename to Kattendoku.
+  const saved = localStorage.getItem('kattendoku-progress') ?? localStorage.getItem('meowdoku-progress');
+  try { p = JSON.parse(saved) || {}; } catch { /* corrupt storage: start fresh */ }
   p.solved ??= { normal: [], hard: [], ultra: [] };
   p.current ??= { normal: 1, hard: 1, ultra: 1 };
   return p;
 }
 
 function saveProgress() {
-  localStorage.setItem('meowdoku-progress', JSON.stringify(progress));
+  localStorage.setItem('kattendoku-progress', JSON.stringify(progress));
 }
 
 const maxUnlocked = (diff) => Math.min(LEVEL_COUNT, Math.max(0, ...progress.solved[diff]) + 1);
@@ -384,7 +386,7 @@ function openLevels() {
 }
 
 function openHelp() {
-  showModal('Zo speel je Meowdoku', `
+  showModal('Zo speel je Kattendoku', `
     <ul class="rules">
       <li><b>Eén kat per kleur</b> &ndash; elk gekleurd gebied krijgt precies één kat.</li>
       <li><b>Eén kat per rij en kolom</b> &ndash; katten delen nooit een rij of kolom.</li>
