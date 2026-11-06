@@ -256,12 +256,49 @@ function startTimer() {
   state.timer = setInterval(() => {
     $("timer").textContent = fmt(Date.now() - state.start);
   }, 1000);
+  keepAwake();
 }
 
 function stopTimer() {
   clearInterval(state.timer);
+  allowSleep();
   return Date.now() - state.start;
 }
+
+// ---------- Screen wake lock ----------
+
+let wakeLock = null;
+
+function keepAwake() {
+  if (!navigator.wakeLock || wakeLock || document.hidden) return;
+  const req = navigator.wakeLock.request("screen").then(
+    (lock) => {
+      lock.onrelease = () => {
+        if (wakeLock === req) wakeLock = null;
+      };
+      return lock;
+    },
+    () => {
+      if (wakeLock === req) wakeLock = null;
+      return null;
+    },
+  );
+  wakeLock = req;
+}
+
+function allowSleep() {
+  const req = wakeLock;
+  wakeLock = null;
+  req?.then((lock) => lock?.release());
+}
+
+// The browser drops the lock when the tab is hidden; some only grant it after a tap.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && !state.over) keepAwake();
+});
+document.addEventListener("pointerdown", () => {
+  if (!state.over) keepAwake();
+});
 
 // ---------- Game actions ----------
 
